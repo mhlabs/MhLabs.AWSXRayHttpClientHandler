@@ -12,6 +12,20 @@ namespace MhLabs.AWSXRayHttpClientHandler
 {
     public class XRayTracingMessageHandler : HttpClientHandler
     {
+        private readonly Func<HttpRequestMessage, string> _overrideSubSegmentNameFunc;
+
+        public XRayTracingMessageHandler() : this(message => null)
+        {
+        }
+        public XRayTracingMessageHandler(string overrideSubSegmentName) : this(message => overrideSubSegmentName)
+        {
+        }
+
+        public XRayTracingMessageHandler(Func<HttpRequestMessage, string> overrideSubSegmentNameFunc)
+        {
+            _overrideSubSegmentNameFunc = overrideSubSegmentNameFunc;
+        }
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             ProcessRequest(request);
@@ -39,7 +53,7 @@ namespace MhLabs.AWSXRayHttpClientHandler
             return webResponse;
         }
 
-        private static void ProcessResponse(HttpResponseMessage response)
+        private void ProcessResponse(HttpResponseMessage response)
         {
             if (AWSXRayRecorder.Instance.IsTracingDisabled())
                 return;
@@ -58,11 +72,13 @@ namespace MhLabs.AWSXRayHttpClientHandler
             AWSXRayRecorder.Instance.AddHttpInformation(nameof(response), (object)dictionary);
         }
 
-        private static void ProcessRequest(HttpRequestMessage request)
+        private void ProcessRequest(HttpRequestMessage request)
         {
+            Console.WriteLine("IsTracingDisabled() = " + AWSXRayRecorder.Instance.IsTracingDisabled());
+            Console.WriteLine("Subsegment name = " + _overrideSubSegmentNameFunc?.Invoke(request));
             if (!AWSXRayRecorder.Instance.IsTracingDisabled())
             {
-                AWSXRayRecorder.Instance.BeginSubsegment(request.RequestUri.Host);
+                AWSXRayRecorder.Instance.BeginSubsegment(_overrideSubSegmentNameFunc?.Invoke(request) != null ? _overrideSubSegmentNameFunc(request) : request.RequestUri.Host);
                 AWSXRayRecorder.Instance.SetNamespace("remote");
                 var dictionary =
                     new Dictionary<string, object>
