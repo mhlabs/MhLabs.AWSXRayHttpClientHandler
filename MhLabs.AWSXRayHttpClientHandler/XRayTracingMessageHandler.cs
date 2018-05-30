@@ -26,6 +26,8 @@ namespace MhLabs.AWSXRayHttpClientHandler
             _overrideSubSegmentNameFunc = overrideSubSegmentNameFunc;
         }
 
+        public string Namespace { get; set; } = "remote";
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             ProcessRequest(request);
@@ -74,12 +76,10 @@ namespace MhLabs.AWSXRayHttpClientHandler
 
         private void ProcessRequest(HttpRequestMessage request)
         {
-            Console.WriteLine("IsTracingDisabled() = " + AWSXRayRecorder.Instance.IsTracingDisabled());
-            Console.WriteLine("Subsegment name = " + _overrideSubSegmentNameFunc?.Invoke(request));
             if (!AWSXRayRecorder.Instance.IsTracingDisabled())
             {
-                AWSXRayRecorder.Instance.BeginSubsegment(_overrideSubSegmentNameFunc?.Invoke(request) != null ? _overrideSubSegmentNameFunc(request) : request.RequestUri.Host);
-                AWSXRayRecorder.Instance.SetNamespace("remote");
+                AWSXRayRecorder.Instance.BeginSubsegment(!string.IsNullOrEmpty(_overrideSubSegmentNameFunc?.Invoke(request)) ? _overrideSubSegmentNameFunc(request) : request.RequestUri.Host);
+                AWSXRayRecorder.Instance.SetNamespace(Namespace ?? "remote");
                 var dictionary =
                     new Dictionary<string, object>
                     {
@@ -87,11 +87,10 @@ namespace MhLabs.AWSXRayHttpClientHandler
                         ["method"] = request.Method.Method
                     };
                 AWSXRayRecorder.Instance.AddHttpInformation(nameof(request), dictionary);
+                if (!TraceHeader.TryParse(TraceContext.GetEntity(), out var header))
+                    return;
+                request.Headers.Add("X-Amzn-Trace-Id", header.ToString());
             }
-
-            if (!TraceHeader.TryParse(TraceContext.GetEntity(), out var header))
-                return;
-            request.Headers.Add("X-Amzn-Trace-Id", header.ToString());
         }
     }
 }
